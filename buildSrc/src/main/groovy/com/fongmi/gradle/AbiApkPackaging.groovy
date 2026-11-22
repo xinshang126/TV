@@ -19,27 +19,28 @@ class AbiApkPackaging {
         mpv: [packageName: 'com.fongmi.runtime.mpv', compatibilityId: 'mpv-jni-ffmpeg-shared-v1', library: 'libplayer.so', label: 'mpv', property: 'tvMpv']
     ].asImmutable()
 
-    static void configure(Project project, Object apkArtifact) {
+    static void configure(Project project, Object apkArtifact, boolean jjSideBySide = false) {
         rejectRetiredModes(project)
         def components = project.extensions.getByName('androidComponents')
         configureDebugResourceCacheKey(project, components)
         components.onVariants(components.selector().all()) { variant ->
             def device = variant.productFlavors.find { it.first == 'device' }?.second
             if (!device) throw new GradleException("Missing device flavor for ${variant.name}")
-            def abis = configureOutputs(variant, device)
+            def abis = configureOutputs(variant, device, jjSideBySide)
             configureNativeLibraries(project, variant, abis)
             if (variant.buildType == 'release') configureReleaseExport(project, variant, device, apkArtifact)
         }
     }
 
-    private static List<String> configureOutputs(def variant, String device) {
-        return variant.outputs.collect { output -> configureOutput(variant, device, output) }
+    private static List<String> configureOutputs(def variant, String device, boolean jjSideBySide) {
+        return variant.outputs.collect { output -> configureOutput(variant, device, output, jjSideBySide) }
     }
 
-    private static String configureOutput(def variant, String device, def output) {
+    private static String configureOutput(def variant, String device, def output, boolean jjSideBySide) {
         def abi = output.filters.find { it.filterType.toString() == 'ABI' }?.identifier
         if (!ABI_FLAVORS.containsValue(abi)) throw new GradleException("Missing or unsupported ABI for ${variant.name}")
-        output.outputFileName.set(hostFileName(device, abi, variant.buildType))
+        String outputType = jjSideBySide && variant.buildType == 'debug' ? 'jjtest' : variant.buildType
+        output.outputFileName.set(hostFileName(device, abi, outputType))
         return abi
     }
 
